@@ -1,6 +1,6 @@
 {
   "name": "@bepalo/rjson",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A compact, URL-friendly serialization format that is smaller than JSON while remaining human-readable and fast to parse.",
   "author": "Natnael Eshetu",
   "license": "MIT",
