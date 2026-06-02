@@ -1,5 +1,7 @@
 # 🏆 @bepalo/rjson
 
+![hero](./assets/hero.png)
+
 [![npm version](https://img.shields.io/npm/v/@bepalo/rjson.svg)](https://www.npmjs.com/package/@bepalo/rjson)
 [![CI](https://img.shields.io/github/actions/workflow/status/bepalo/rjson/ci.yaml?label=ci)](https://github.com/bepalo/rjson/actions/workflows/ci.yaml)
 [![tests](https://img.shields.io/github/actions/workflow/status/bepalo/rjson/testing.yaml?label=tests)](https://github.com/bepalo/rjson/actions/workflows/testing.yaml)
