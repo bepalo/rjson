@@ -2,7 +2,7 @@
 
 | 🕙 Start time | ⌛ Duration |
 | --- | ---: |
-| 6/2/2026, 3:43:13 PM | 0.859 s |
+| 6/2/2026, 4:31:46 PM | 0.712 s |
 
 | | ✅ Passed | ❌ Failed | ⏩ Skipped | 🚧 Todo | ⚪ Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -11,7 +11,7 @@
 
 ## ✅ <a id="file0" href="#file0">tests/parser.test.js</a>
 
-75 passed, 0 failed, 0 skipped, 0 todo, done in 37.87976700000013 s
+75 passed, 0 failed, 0 skipped, 0 todo, done in 26.161337999999887 s
 
 ```
 ✅ RJSON.parse - Objects
