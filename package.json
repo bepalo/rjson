@@ -36,7 +36,7 @@
     "build:cjs": "tsc --project tsconfig.cjs.json",
     "build": "concurrently \"pnpm run build:esm\" \"pnpm run build:cjs\"",
     "build:watch": "concurrently \"tsc --watch --project tsconfig.esm.json\" \"tsc --watch --project tsconfig.cjs.json\"",
-    "prepare": "pnpm run build",
+    "prepublishOnly": "pnpm run build",
     "test": "vitest --reporter=dot",
     "test:ci": "vitest run --reporter=vitest-markdown-reporter --outputFile=test-result.md"
   },
