@@ -38,6 +38,16 @@ const Constants = {
   CCUndefined: "U".charCodeAt(0),
 } as const;
 
+/**
+ * Configuration state for the RJSON parser.
+ * @type {Object} ParseRJSONState
+ * @property {number} start - Start index in the source string (inclusive).
+ * @property {number} end - End index in the source string (exclusive).
+ * @property {number} i - Current parsing position.
+ * @property {number} charCode - Unicode code point of the current character.
+ * @property {boolean} [forbidTextKeys] - If true, quoted string keys are not allowed.
+ * @property {boolean} [forbidEmptyKeys] - If true, empty keys are not allowed.
+ */
 interface ParseRJSONState {
   start: number;
   end: number;
@@ -495,6 +505,27 @@ const parseRJSONEntity = (
   }
 };
 
+/**
+ * Parses an RJSON string into a JavaScript value.
+ *
+ * @param source - The RJSON string to parse.
+ * @param initialState - Optional partial configuration for the parser (e.g., forbidding certain key types).
+ * @returns The parsed JavaScript value (could be `null`, `undefined`, boolean, number, string, array, or plain object).
+ * @throws {Error} When the input contains invalid RJSON syntax.
+ *
+ * @example
+ * parseRJSON('_(1,2,3)_');
+ * // → [1, 2, 3]
+ *
+ * @example
+ * parseRJSON('(name:"John",age:30)');
+ * // → { name: "John", age: 30 }
+ *
+ * @example
+ * parseRJSON('~T(id,title,body)~');
+ * // → { id: true, title: true, body: true }
+ *
+ */
 export const parseRJSON = (
   source: string,
   initalState?: Partial<ParseRJSONState>,
@@ -524,6 +555,21 @@ export const parseRJSON = (
   return result;
 };
 
+/**
+ * Tagged template literal for parsing RJSON strings directly in code.
+ * Interpolated values are concatenated with the template strings before parsing.
+ *
+ * @param strings - Array of static string parts.
+ * @param values - Interpolated dynamic values.
+ * @returns The parsed JavaScript value.
+ * @throws {Error} If the resulting string is not valid RJSON.
+ *
+ * @example
+ * const name = "Alice";
+ * const age = 28;
+ * rjson`(name:${name},age:${age})`;
+ * // → { name: "Alice", age: 28 }
+ */
 export function rjson(
   strings: TemplateStringsArray,
   ...values: unknown[]
@@ -554,16 +600,48 @@ export const stringifyRJSONKey = (key: string): string => {
   return key;
 };
 
+/**
+ * Serializes a JavaScript array into RJSON array format `_( ... )_`.
+ *
+ * @param data - The array to serialize.
+ * @returns RJSON string representing the array.
+ *
+ * @example
+ * stringifyRJSONArray([1, "hello", true]);
+ * // → "_(1,'hello',T)_"
+ */
 export const stringifyRJSONArray = (data: unknown[]): string => {
   return `_(${data.map((d) => stringifyRJSON(d)).join(",")})_`;
 };
 
+/**
+ * Serializes a plain JavaScript object into RJSON object format `( ... )`.
+ *
+ * @param data - The object to serialize.
+ * @returns RJSON string representing the object.
+ *
+ * @example
+ * stringifyRJSONObject({ a: 1, b: "test" });
+ * // → "(a:1,b:'test')"
+ */
 export const stringifyRJSONObject = (data: Record<string, unknown>): string => {
   return `(${Object.entries(data)
     .map(([k, v]) => `${stringifyRJSONKey(k)}:${stringifyRJSON(v)}`)
     .join(",")})`;
 };
 
+/**
+ * Serializes a mapped array – a dictionary where every key maps to the same value.
+ * Output format: `~value(key1,key2,...)~`
+ *
+ * @param value - The value that each key maps to.
+ * @param data - Array of keys (will be stringified using `stringifyRJSONKey`).
+ * @returns RJSON string for the mapped array.
+ *
+ * @example
+ * stringifyRJSONMappedArray(42, ["x", "y", "z"]);
+ * // → "~42(x,y,z)~"
+ */
 export const stringifyRJSONMappedArray = (
   value: unknown | undefined | null,
   data: unknown[],
@@ -571,6 +649,17 @@ export const stringifyRJSONMappedArray = (
   return `~${stringifyRJSON(value)}(${data.map((d) => stringifyRJSONKey(String(d))).join(",")})~`;
 };
 
+/**
+ * Serializes a string into an RJSON string literal.
+ * Chooses the least ambiguous quote character (single, double, or backtick)
+ * and escapes if necessary.
+ *
+ * @param data - The string to serialize.
+ * @returns RJSON string literal.
+ *
+ * @example
+ * stringifyRJSONString("It's fine");  // → '"It\'s fine"'  (or single quotes if possible)
+ */
 export const stringifyRJSONString = (data: string): string => {
   return !data.includes("'")
     ? `'${data}'`
@@ -581,6 +670,19 @@ export const stringifyRJSONString = (data: string): string => {
         : `'${data.replace("'", "\\'")}'`;
 };
 
+/**
+ * Serializes a number into RJSON format.
+ * Uses decimal notation when shorter, otherwise exponential notation.
+ * Non‑finite numbers (Infinity, NaN) become `"N"`.
+ *
+ * @param data - The number to serialize.
+ * @returns RJSON numeric representation.
+ *
+ * @example
+ * stringifyRJSONNumber(123.456); // → "123.456"
+ * stringifyRJSONNumber(1e20);    // → "1e+20" (if exponential is shorter)
+ * stringifyRJSONNumber(NaN);     // → "N"
+ */
 export const stringifyRJSONNumber = (data: number): string => {
   if (!Number.isFinite(data)) {
     return "N";
@@ -592,10 +694,34 @@ export const stringifyRJSONNumber = (data: number): string => {
   return norm.length <= expo.length ? norm : expo;
 };
 
+/**
+ * Serializes a boolean value into RJSON.
+ *
+ * @param data - The boolean to serialize.
+ * @returns `"T"` for `true`, `"F"` for `false`.
+ *
+ * @example
+ * stringifyRJSONBoolean(true);  // → "T"
+ */
 export const stringifyRJSONBoolean = (data: boolean): string => {
   return data ? "T" : "F";
 };
 
+/**
+ * Main serialization function for any JavaScript value to RJSON.
+ * Dispatches to the appropriate type‑specific serializer.
+ *
+ * @param data - The value to serialize (optional; `undefined` becomes `"U"`).
+ * @returns RJSON string representation.
+ *
+ * @example
+ * stringifyRJSON({ answer: 42, flag: true });
+ * // → "(answer:42,flag:T)"
+ *
+ * @example
+ * stringifyRJSON(undefined);   // → "U"
+ * stringifyRJSON(null);        // → ""
+ */
 export const stringifyRJSON = (data?: unknown): string => {
   if (data === undefined) {
     return "U";
@@ -618,6 +744,9 @@ export const stringifyRJSON = (data?: unknown): string => {
   }
 };
 
+/**
+ * Namespace containing all RJSON parsing and serialization functions.
+ */
 export const RJSON = {
   parse: parseRJSON,
   stringify: stringifyRJSON,
