@@ -581,6 +581,24 @@ export function rjson(
   return parseRJSON(source as string);
 }
 
+/**
+ * Serializes a string into an RJSON key format. Adds quotes if needed.
+ *
+ * @param data - The string to serialize.
+ * @returns RJSON string representing the key.
+ *
+ * @example
+ * stringifyRJSONKey("name");
+ * // → "name"
+ *
+ * @example
+ * stringifyRJSONKey("user.id");
+ * // → "user.id"
+ *
+ * @example
+ * stringifyRJSONKey("4user.name");
+ * // → "'4user.name'"
+ */
 export const stringifyRJSONKey = (key: string): string => {
   if (key.length === 0) {
     return "";
@@ -758,4 +776,7 @@ export const RJSON = {
   stringifyBoolean: stringifyRJSONBoolean,
 };
 
+/**
+ * Default export: the {@link RJSON} namespace object.
+ */
 export default RJSON;
