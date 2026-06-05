@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.11] - 2026-06-05
+
+### Added
+
+- **Whitespace Support**: Parsers can now naturally skip spaces, tabs, carriage returns, and newlines across objects, arrays, and mapped arrays without failing.
+- **Extended Runtime Value Tokens**: Full encoding and decoding serialization support for `NaN` (`X`), `Infinity` (`I`), `-Infinity` (`-I`), and `-0`.
+- **RJSONParseError Class**: Replaced generic error strings with a fully descriptive, traceable error instance containing positional code context.
+- **Dynamic String Delimiters**: Serializer now scans for internal single quotes, double quotes, and backticks to pick the cleanest option and minimize escape characters[cite: 8, 10].
+
+### Changed
+
+- **Serializer Rename**: Renamed the exported utility `stringifyRJSONString` to `stringifyRJSONText`.
+- **Serializer Rename**: Renamed the exported utility `RJSON.stringifyString` to `RJSON.stringifyText`.
+
+### Fixed
+
+- **Value Semantics Consistency**: Empty structural positions (e.g., trailing array commas or omitted object values) now properly preserve JavaScript runtime semantics as `undefined` instead of resolving to `null`[cite: 8, 10, 11].
+
+### Breaking
+
+- `null` values are now explicitly serialized as `"N"` rather than outputting an empty string `""`.
+- Out-of-bounds or invalid numbers (`NaN`, `Infinity`) no longer fallback globally to `"N"`. They evaluate to their own independent spec tokens.
+
 ## [1.0.1] - 2026-06-02
 
 ### Changed

@@ -1,7 +1,7 @@
 // tsconfig.cjs.json
 {
   "compilerOptions": {
-    "target": "ES2015",
+    "target": "es2021",
     "module": "CommonJS",
     "moduleResolution": "Node",
     "allowImportingTsExtensions": true,

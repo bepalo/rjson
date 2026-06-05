@@ -1,3 +1,6 @@
+/**
+ * Character codes
+ */
 const Constants = {
   ObjectStart: "(".charCodeAt(0),
   ObjectEnd: ")".charCodeAt(0),
@@ -36,9 +39,32 @@ const Constants = {
   CCFalse: "F".charCodeAt(0),
   CCNull: "N".charCodeAt(0),
   CCUndefined: "U".charCodeAt(0),
+  CCNaN: "X".charCodeAt(0),
+  CCInf: "I".charCodeAt(0),
+  CCSpace: " ".charCodeAt(0),
+  CCNewLine: "\n".charCodeAt(0),
+  CCCarrRet: "\r".charCodeAt(0),
+  CCTab: "\t".charCodeAt(0),
 } as const;
 
-/**
+export class RJSONParseError extends Error {
+  constructor(
+    public source: string,
+    public state: ParseRJSONState,
+    message: string,
+    public index: number,
+    public token: string,
+  ) {
+    super(
+      `[RJSON] '${message}' '${token}' at index ${index}: \`${source.slice(
+        Math.max(0, index - 20),
+        index + 1,
+      )}\``,
+    );
+  }
+}
+
+export /**
  * Configuration state for the RJSON parser.
  * @type {Object} ParseRJSONState
  * @property {number} start - Start index in the source string (inclusive).
@@ -57,43 +83,54 @@ interface ParseRJSONState {
   forbidEmptyKeys?: boolean;
 }
 
+/**
+ * Check if charChode is alpha numeric
+ */
 const isAlpha = (charCode: number): boolean =>
   (charCode >= Constants.CCa && charCode <= Constants.CCz) ||
   (charCode >= Constants.CCA && charCode <= Constants.CCZ);
 
+/**
+ * Check if charChode is digit
+ */
 const isDigit = (charCode: number): boolean =>
   charCode >= Constants.CC0 && charCode <= Constants.CC9;
 
+/**
+ * Check if charChode is valid initial identifier
+ */
 const isIdentifier0 = (charCode: number): boolean =>
   isAlpha(charCode) || charCode === Constants.CCUnderScore;
 
+/**
+ * Check if charChode is valid non-initial identifier
+ */
 const isIdentifier1 = (charCode: number): boolean =>
   isAlpha(charCode) ||
   isDigit(charCode) ||
   charCode === Constants.CCUnderScore ||
   charCode === Constants.CCDot;
 
-const throwRJSONError = (
-  source: string,
-  _state: ParseRJSONState,
-  message: string,
-  index: number,
-  token: string,
-) => {
-  throw new Error(
-    `'${message}' '${token}' at index ${index}\n\`\n${source.slice(
-      Math.max(0, index - 20),
-      index + 1,
-    )}\n\``,
-  );
-};
-
+/**
+ * Prese Key
+ */
 const parseRJSONKey = (
   source: string,
   state: ParseRJSONState,
   separatorCharCode: number,
   endCharCode: number,
 ): string => {
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   // first char
   {
     state.charCode = source.charCodeAt(state.i);
@@ -101,7 +138,7 @@ const parseRJSONKey = (
       case separatorCharCode:
       case endCharCode:
         if (state.forbidEmptyKeys) {
-          return throwRJSONError(
+          throw new RJSONParseError(
             source,
             state,
             "Empty object key is forbidden in this context",
@@ -114,7 +151,7 @@ const parseRJSONKey = (
       case Constants.STRSDouble:
       case Constants.STRSTick:
         if (state.forbidTextKeys) {
-          return throwRJSONError(
+          throw new RJSONParseError(
             source,
             state,
             "Text object key is forbidden in this context",
@@ -125,7 +162,7 @@ const parseRJSONKey = (
         return parseRJSONText(source, state);
     }
     if (!isIdentifier0(state.charCode)) {
-      return throwRJSONError(
+      throw new RJSONParseError(
         source,
         state,
         "Invalid object key start token",
@@ -135,27 +172,79 @@ const parseRJSONKey = (
     }
   }
   const s = state.i;
+  let e = s;
+  let _break = false;
+  let _space = false;
   for (state.i++; state.i < state.end; state.i++) {
     state.charCode = source.charCodeAt(state.i);
-    if (
-      state.charCode === separatorCharCode ||
-      state.charCode === endCharCode
-    ) {
-      break;
-    } else if (!isIdentifier1(state.charCode)) {
-      return throwRJSONError(
-        source,
-        state,
-        "Invalid object key token",
-        state.i,
-        source.charAt(state.i),
-      );
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        if (!_space) {
+          _space = true;
+          e = state.i;
+        }
+        continue;
+      case separatorCharCode:
+      case endCharCode:
+        if (!_space) {
+          e = state.i;
+        }
+        _break = true;
+        break;
+      default:
+        if (_space) {
+          throw new RJSONParseError(
+            source,
+            state,
+            "Invalid key separator token",
+            state.i,
+            source.charAt(state.i),
+          );
+        } else if (!isIdentifier1(state.charCode)) {
+          throw new RJSONParseError(
+            source,
+            state,
+            "Invalid key token",
+            state.i,
+            source.charAt(state.i),
+          );
+        }
     }
+    if (_break) break;
   }
-  return source.slice(s, state.i);
+  return source.slice(s, e);
 };
 
+/**
+ * Parse Text
+ */
 const parseRJSONText = (source: string, state: ParseRJSONState): string => {
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+      case Constants.STRSSingle:
+      case Constants.STRSDouble:
+      case Constants.STRSTick:
+        break;
+      default:
+        throw new RJSONParseError(
+          source,
+          state,
+          "Invalid string start delimiter token",
+          state.i,
+          source.charAt(state.i),
+        );
+    }
+    break;
+  }
   const textDelimiter = state.charCode;
   const s = ++state.i;
   let j = s;
@@ -163,38 +252,76 @@ const parseRJSONText = (source: string, state: ParseRJSONState): string => {
   for (; state.i < state.end; state.i++) {
     state.charCode = source.charCodeAt(state.i);
     if (state.charCode === Constants.Escape) {
-      result += source.slice(j, state.i);
-      j = ++state.i;
-      continue;
+      switch (source.charCodeAt(state.i + 1)) {
+        case textDelimiter:
+        case Constants.Escape:
+          result += source.slice(j, state.i);
+          j = ++state.i;
+          continue;
+      }
     } else if (state.charCode === textDelimiter) {
       result += source.slice(j, state.i);
       state.i++;
       break;
     }
   }
+  if (state.charCode !== textDelimiter && state.charCode !== Constants.Escape) {
+    throw new RJSONParseError(
+      source,
+      state,
+      "Invalid string end delimiter token",
+      state.i,
+      source.charAt(state.i),
+    );
+  }
   return result;
 };
 
-const praseRJSONNumber = (
+/**
+ * Parse Number
+ */
+const parseRJSONNumber = (
   source: string,
   state: ParseRJSONState,
   endCharCode?: number,
 ): number => {
-  const s = state.i;
+  let s = state.i;
+  let sign = undefined;
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+      case Constants.CCMinus:
+        sign = -1;
+        s = state.i;
+        break;
+      case Constants.CCPlus:
+        sign = 1;
+        s = state.i;
+        break;
+    }
+    break;
+  }
   let decimalPointsCount = state.charCode === Constants.CCDecimalPoint ? 1 : 0;
   let eCount =
     state.charCode === Constants.CCE || state.charCode === Constants.CCe
       ? 1
       : 0;
+  let digitsAfterE = 0;
+  let _break = false;
   for (state.i++; state.i < state.end; state.i++) {
     state.charCode = source.charCodeAt(state.i);
-    if (state.charCode === Constants.CCValueSeparator) {
-      break;
-    }
     switch (state.charCode) {
+      case Constants.CCInf:
+        state.i++;
+        return sign != null && sign < 0 ? -Infinity : Infinity;
       case Constants.CCDecimalPoint:
         if (decimalPointsCount > 0) {
-          return throwRJSONError(
+          throw new RJSONParseError(
             source,
             state,
             "Invalid decimal token",
@@ -207,7 +334,7 @@ const praseRJSONNumber = (
       case Constants.CCE:
       case Constants.CCe:
         if (eCount > 0) {
-          return throwRJSONError(
+          throw new RJSONParseError(
             source,
             state,
             "Invalid 'e' token",
@@ -220,7 +347,7 @@ const praseRJSONNumber = (
       case Constants.CCMinus:
       case Constants.CCPlus:
         if (eCount === 0) {
-          return throwRJSONError(
+          throw new RJSONParseError(
             source,
             state,
             "Invalid sign token",
@@ -239,12 +366,34 @@ const praseRJSONNumber = (
       case 55:
       case 56:
       case 57:
+        if (eCount > 0) {
+          digitsAfterE++;
+        }
         continue;
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+      case Constants.CCValueSeparator:
+      case endCharCode: {
+        // check for incomplete values like 1e+
+        if (eCount > 0 && digitsAfterE === 0) {
+          throw new RJSONParseError(
+            source,
+            state,
+            "Invalid end of exponential numeric value",
+            state.i,
+            source.charAt(state.i),
+          );
+        }
+        _break = true;
+        break;
+      }
     }
-    if (state.charCode === endCharCode) {
+    if (_break) {
       break;
     }
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid numeric value token",
@@ -252,20 +401,44 @@ const praseRJSONNumber = (
       source.charAt(state.i),
     );
   }
+  // check for incomplete values like 1e+
+  // check for incomplete values like 1e+
+  if (eCount > 0 && digitsAfterE === 0) {
+    throw new RJSONParseError(
+      source,
+      state,
+      "Invalid end of exponential numeric value",
+      state.i,
+      source.charAt(state.i),
+    );
+  }
   return Number.parseFloat(source.slice(s, state.i));
 };
 
+/**
+ * Parse Value
+ */
 const parseRJSONValue = (
   source: string,
   state: ParseRJSONState,
   endCharCode?: number,
 ): string | number | boolean | undefined | null => {
-  state.charCode = source.charCodeAt(state.i);
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   switch (state.charCode) {
     case Constants.CCValueSeparator:
     case Constants.ObjectEnd:
     case Constants.ArrayEnd0: {
-      return null;
+      return undefined;
     }
     case Constants.CCNull: {
       state.i++;
@@ -285,10 +458,18 @@ const parseRJSONValue = (
     case Constants.STRSTick: {
       return parseRJSONText(source, state);
     }
+    case Constants.CCNaN: {
+      state.i++;
+      return NaN;
+    }
+    case Constants.CCInf: {
+      state.i++;
+      return Infinity;
+    }
     case Constants.CCMinus:
     case Constants.CCPlus:
     case Constants.CCDecimalPoint: {
-      return praseRJSONNumber(source, state, endCharCode);
+      return parseRJSONNumber(source, state, endCharCode);
     }
     default: {
       if (
@@ -298,7 +479,7 @@ const parseRJSONValue = (
         if (endCharCode != null && state.charCode === endCharCode) {
           break;
         }
-        return throwRJSONError(
+        throw new RJSONParseError(
           source,
           state,
           "Invalid token",
@@ -306,15 +487,28 @@ const parseRJSONValue = (
           source.charAt(state.i),
         );
       }
-      return praseRJSONNumber(source, state, endCharCode);
+      return parseRJSONNumber(source, state, endCharCode);
     }
   }
 };
 
+/**
+ * Parse Array
+ */
 const parseRJSONArray = (source: string, state: ParseRJSONState): unknown[] => {
-  state.charCode = source.charCodeAt(state.i);
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   if (state.charCode !== Constants.ArrayStart0) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid array start token",
@@ -324,7 +518,7 @@ const parseRJSONArray = (source: string, state: ParseRJSONState): unknown[] => {
   }
   state.charCode = source.charCodeAt(++state.i);
   if (state.charCode !== Constants.ArrayStart1) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid array start token",
@@ -334,17 +528,47 @@ const parseRJSONArray = (source: string, state: ParseRJSONState): unknown[] => {
   }
   const result: Array<unknown> = [];
   for (state.i++; state.i < state.end; state.i++) {
-    state.charCode = source.charCodeAt(state.i);
+    for (; state.i < state.end; state.i++) {
+      state.charCode = source.charCodeAt(state.i);
+      switch (state.charCode) {
+        case Constants.CCSpace:
+        case Constants.CCNewLine:
+        case Constants.CCCarrRet:
+        case Constants.CCTab:
+          continue;
+      }
+      break;
+    }
+    if (state.charCode === Constants.ArrayEnd0) break;
     const value = parseRJSONEntity(source, state, Constants.ArrayEnd0);
     result.push(value);
-    state.charCode = source.charCodeAt(state.i);
+    for (; state.i < state.end; state.i++) {
+      state.charCode = source.charCodeAt(state.i);
+      switch (state.charCode) {
+        case Constants.CCSpace:
+        case Constants.CCNewLine:
+        case Constants.CCCarrRet:
+        case Constants.CCTab:
+          continue;
+      }
+      break;
+    }
     if (state.charCode === Constants.ArrayEnd0) {
       break;
+    }
+    if (state.charCode !== Constants.CCValueSeparator) {
+      throw new RJSONParseError(
+        source,
+        state,
+        "Invalid array value separator token",
+        state.i,
+        source.charAt(state.i),
+      );
     }
   }
   state.charCode = source.charCodeAt(state.i);
   if (state.charCode !== Constants.ArrayEnd0) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid array end token",
@@ -354,7 +578,7 @@ const parseRJSONArray = (source: string, state: ParseRJSONState): unknown[] => {
   }
   state.charCode = source.charCodeAt(++state.i);
   if (state.charCode !== Constants.ArrayEnd1) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid array end token",
@@ -366,13 +590,27 @@ const parseRJSONArray = (source: string, state: ParseRJSONState): unknown[] => {
   return result;
 };
 
+/**
+ * Parse Mapped Array
+ */
 const parseRJSONMappedArray = (
   source: string,
   state: ParseRJSONState,
 ): Record<string, unknown> => {
-  state.charCode = source.charCodeAt(state.i++);
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
+  state.charCode = source.charCodeAt(state.i);
   if (state.charCode !== Constants.MappedStart0) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid mapped array start token",
@@ -380,10 +618,41 @@ const parseRJSONMappedArray = (
       source.charAt(state.i),
     );
   }
-  const value = parseRJSONEntity(source, state, Constants.MappedStart1);
-  state.charCode = source.charCodeAt(state.i);
+  state.i++;
+  let escapeValue = false;
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+      case Constants.Escape:
+        escapeValue = true;
+        state.i++;
+        break;
+    }
+    break;
+  }
+  const value = parseRJSONEntity(
+    source,
+    state,
+    escapeValue ? undefined : Constants.MappedStart1,
+  );
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   if (state.charCode !== Constants.MappedStart1) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid mapped array start token",
@@ -393,7 +662,17 @@ const parseRJSONMappedArray = (
   }
   const result: Record<string, unknown> = {};
   for (state.i++; state.i < state.end; state.i++) {
-    state.charCode = source.charCodeAt(state.i);
+    for (; state.i < state.end; state.i++) {
+      state.charCode = source.charCodeAt(state.i);
+      switch (state.charCode) {
+        case Constants.CCSpace:
+        case Constants.CCNewLine:
+        case Constants.CCCarrRet:
+        case Constants.CCTab:
+          continue;
+      }
+      break;
+    }
     if (state.charCode === Constants.MappedEnd0) {
       break;
     }
@@ -404,14 +683,43 @@ const parseRJSONMappedArray = (
       Constants.MappedEnd0,
     );
     result[key] = value;
-    state.charCode = source.charCodeAt(state.i);
+    for (; state.i < state.end; state.i++) {
+      state.charCode = source.charCodeAt(state.i);
+      switch (state.charCode) {
+        case Constants.CCSpace:
+        case Constants.CCNewLine:
+        case Constants.CCCarrRet:
+        case Constants.CCTab:
+          continue;
+      }
+      break;
+    }
     if (state.charCode === Constants.MappedEnd0) {
       break;
     }
+    if (state.charCode !== Constants.CCValueSeparator) {
+      throw new RJSONParseError(
+        source,
+        state,
+        "Invalid mapped array value separator token",
+        state.i,
+        source.charAt(state.i),
+      );
+    }
   }
-  state.charCode = source.charCodeAt(state.i);
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   if (state.charCode !== Constants.MappedEnd0) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid mapped array end token",
@@ -421,7 +729,7 @@ const parseRJSONMappedArray = (
   }
   state.charCode = source.charCodeAt(++state.i);
   if (state.charCode !== Constants.MappedEnd1) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid mapped array end token",
@@ -433,13 +741,26 @@ const parseRJSONMappedArray = (
   return result;
 };
 
+/**
+ * Parse Object
+ */
 const parseRJSONObject = (
   source: string,
   state: ParseRJSONState,
 ): Record<string, unknown> => {
-  state.charCode = source.charCodeAt(state.i);
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   if (state.charCode !== Constants.ObjectStart) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid object start token",
@@ -452,7 +773,17 @@ const parseRJSONObject = (
   }
   const result: Record<string, unknown> = {};
   for (state.i++; state.i < state.end; state.i++) {
-    state.charCode = source.charCodeAt(state.i);
+    for (; state.i < state.end; state.i++) {
+      state.charCode = source.charCodeAt(state.i);
+      switch (state.charCode) {
+        case Constants.CCSpace:
+        case Constants.CCNewLine:
+        case Constants.CCCarrRet:
+        case Constants.CCTab:
+          continue;
+      }
+      break;
+    }
     if (state.charCode === Constants.ObjectEnd) {
       break;
     }
@@ -462,20 +793,57 @@ const parseRJSONObject = (
       Constants.CCKeyValueSeparator,
       Constants.ObjectEnd,
     );
-    state.charCode = source.charCodeAt(state.i);
-    if (state.charCode === Constants.CCKeyValueSeparator) {
-      state.i++;
+    for (; state.i < state.end; state.i++) {
+      state.charCode = source.charCodeAt(state.i);
+      switch (state.charCode) {
+        case Constants.CCSpace:
+        case Constants.CCNewLine:
+        case Constants.CCCarrRet:
+        case Constants.CCTab:
+          continue;
+      }
+      break;
     }
+    if (state.charCode !== Constants.CCKeyValueSeparator) {
+      throw new RJSONParseError(
+        source,
+        state,
+        "Invalid object key-value separator token",
+        state.i,
+        source.charAt(state.i),
+      );
+    }
+    state.charCode = source.charCodeAt(++state.i);
     const value = parseRJSONEntity(source, state, Constants.ObjectEnd);
     result[key] = value;
-    state.charCode = source.charCodeAt(state.i);
+    for (; state.i < state.end; state.i++) {
+      state.charCode = source.charCodeAt(state.i);
+      switch (state.charCode) {
+        case Constants.CCSpace:
+        case Constants.CCNewLine:
+        case Constants.CCCarrRet:
+        case Constants.CCTab:
+          continue;
+      }
+      break;
+    }
     if (state.charCode === Constants.ObjectEnd) {
       break;
     }
   }
-  state.charCode = source.charCodeAt(state.i);
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   if (state.charCode !== Constants.ObjectEnd) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Invalid object end token",
@@ -487,13 +855,28 @@ const parseRJSONObject = (
   return result;
 };
 
+/**
+ * Parse Entity
+ */
 const parseRJSONEntity = (
   source: string,
   state: ParseRJSONState,
   endCharCode?: number,
 ): unknown => {
-  state.charCode = source.charCodeAt(state.i);
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   switch (state.charCode) {
+    case endCharCode:
+      return undefined;
     case Constants.ArrayStart0:
       return parseRJSONArray(source, state);
     case Constants.ObjectStart:
@@ -518,7 +901,7 @@ const parseRJSONEntity = (
  * // → [1, 2, 3]
  *
  * @example
- * parseRJSON('(name:"John",age:30)');
+ * parseRJSON('(name:'John',age:30)');
  * // → { name: "John", age: 30 }
  *
  * @example
@@ -528,10 +911,10 @@ const parseRJSONEntity = (
  */
 export const parseRJSON = (
   source: string,
-  initalState?: Partial<ParseRJSONState>,
+  initalState?: Partial<Omit<ParseRJSONState, "i">>,
 ): unknown => {
   if (source.length === 0) {
-    return null;
+    return undefined;
   }
   const state: ParseRJSONState = {
     start: 0,
@@ -541,8 +924,19 @@ export const parseRJSON = (
     ...initalState,
   };
   const result = parseRJSONEntity(source, state);
+  for (; state.i < state.end; state.i++) {
+    state.charCode = source.charCodeAt(state.i);
+    switch (state.charCode) {
+      case Constants.CCSpace:
+      case Constants.CCNewLine:
+      case Constants.CCCarrRet:
+      case Constants.CCTab:
+        continue;
+    }
+    break;
+  }
   if (state.i < source.length) {
-    return throwRJSONError(
+    throw new RJSONParseError(
       source,
       state,
       "Extra tokens at the end",
@@ -567,7 +961,7 @@ export const parseRJSON = (
  * @example
  * const name = "Alice";
  * const age = 28;
- * rjson`(name:${name},age:${age})`;
+ * rjson`(name:'${name}',age:${age})`;
  * // → { name: "Alice", age: 28 }
  */
 export function rjson(
@@ -575,9 +969,7 @@ export function rjson(
   ...values: unknown[]
 ): unknown {
   const source =
-    values.length === 0
-      ? strings[0]
-      : strings[0] + values.map((v, i) => `${v}${values[i]}`).join("");
+    strings[0] + values.map((v, i) => `${v}${strings[i + 1]}`).join("");
   return parseRJSON(source as string);
 }
 
@@ -629,7 +1021,9 @@ export const stringifyRJSONKey = (key: string): string => {
  * // → "_(1,'hello',T)_"
  */
 export const stringifyRJSONArray = (data: unknown[]): string => {
-  return `_(${data.map((d) => stringifyRJSON(d)).join(",")})_`;
+  const lastElement =
+    data.length > 0 && data[data.length - 1] === undefined ? "," : "";
+  return `_(${data.map((e) => (e === undefined ? "" : stringifyRJSON(e))).join(",")}${lastElement})_`;
 };
 
 /**
@@ -659,39 +1053,115 @@ export const stringifyRJSONObject = (data: Record<string, unknown>): string => {
  * @example
  * stringifyRJSONMappedArray(42, ["x", "y", "z"]);
  * // → "~42(x,y,z)~"
+ *
+ * @example
+ * stringifyRJSONMappedArray({ a: true, b: 1 }, ["read", "write", "delete"]);
+ * // → "~\(a:T,b:1)(read,write,delete)~"
+ *
+ * @example
+ * stringifyRJSONMappedArray([, 1, ,], ["read", "write", "delete"]);
+ * // → "~_(,1,,)_(read,write,delete)~"
+ *
  */
 export const stringifyRJSONMappedArray = (
   value: unknown | undefined | null,
   data: unknown[],
 ): string => {
-  return `~${stringifyRJSON(value)}(${data.map((d) => stringifyRJSONKey(String(d))).join(",")})~`;
+  const escape = typeof value === "object" && !Array.isArray(value) ? "\\" : "";
+  return `~${escape}${stringifyRJSON(value)}(${data.map((d) => stringifyRJSONKey(String(d))).join(",")})~`;
+};
+
+/**
+ * Get delimiter index by charCode
+ */
+const delimiterIndex = (charCode: number): number => {
+  switch (charCode) {
+    case Constants.STRSSingle:
+      return 0;
+    case Constants.STRSDouble:
+      return 1;
+    case Constants.STRSTick:
+      return 2;
+  }
+  return -1;
+};
+
+/**
+ * Get delimiter from index
+ */
+const delimiterFromIndex = (index: number): string => {
+  switch (index) {
+    case 0:
+      return String.fromCharCode(Constants.STRSSingle);
+    case 1:
+      return String.fromCharCode(Constants.STRSDouble);
+    case 2:
+    default:
+      return String.fromCharCode(Constants.STRSTick);
+  }
 };
 
 /**
  * Serializes a string into an RJSON string literal.
- * Chooses the least ambiguous quote character (single, double, or backtick)
+ * Chooses the most efficient quote character (single, double, or backtick)
  * and escapes if necessary.
  *
  * @param data - The string to serialize.
  * @returns RJSON string literal.
  *
  * @example
- * stringifyRJSONString("It's fine");  // → '"It\'s fine"'  (or single quotes if possible)
+ * stringifyRJSONText("It's fine");  // → '"It's fine"'
  */
-export const stringifyRJSONString = (data: string): string => {
-  return !data.includes("'")
-    ? `'${data}'`
-    : !data.includes('"')
-      ? `"${data}"`
-      : !data.includes("`")
-        ? `\`${data}\``
-        : `'${data.replace("'", "\\'")}'`;
+export const stringifyRJSONText = (data: string): string => {
+  if (data === "") return "''";
+  data = data.replaceAll("\\", "\\\\");
+  const foundDelimiters = new Array<number>(3).fill(0);
+  for (let i = 0; i < data.length; i++) {
+    const charCode = data.charCodeAt(i);
+    switch (charCode) {
+      case Constants.STRSSingle:
+      case Constants.STRSDouble:
+      case Constants.STRSTick:
+        foundDelimiters[delimiterIndex(charCode)]++;
+        continue;
+    }
+  }
+  let minDelimitterIndex = -1;
+  for (let i = 0; i < foundDelimiters.length; i++) {
+    const foundDelimiter = foundDelimiters[i];
+    if (foundDelimiter > 0) {
+      if (minDelimitterIndex < 0) {
+        minDelimitterIndex = i;
+      } else if (foundDelimiter < foundDelimiters[minDelimitterIndex]) {
+        minDelimitterIndex = i;
+      }
+    }
+  }
+  // const appendChar =
+  //   data.length > 0 &&
+  //   data.charCodeAt(data.length - 1) === Constants.Escape &&
+  //   (data.length > 1
+  //     ? data.charCodeAt(data.length - 2) !== Constants.Escape
+  //     : true)
+  //     ? "\\"
+  //     : "";
+  if (foundDelimiters[0] === 0) {
+    return `'${data}'`;
+  } else if (foundDelimiters[1] === 0) {
+    return `"${data}"`;
+  } else if (foundDelimiters[2] === 0) {
+    return `\`${data}\``;
+  } else {
+    const delim = delimiterFromIndex(minDelimitterIndex) as string;
+    return `${delim}${data.replaceAll(delim, "\\" + delim)}${delim}`;
+  }
 };
 
 /**
  * Serializes a number into RJSON format.
  * Uses decimal notation when shorter, otherwise exponential notation.
  * Non‑finite numbers (Infinity, NaN) become `"N"`.
+ * Zero sign is preserved for -0
  *
  * @param data - The number to serialize.
  * @returns RJSON numeric representation.
@@ -700,12 +1170,19 @@ export const stringifyRJSONString = (data: string): string => {
  * stringifyRJSONNumber(123.456); // → "123.456"
  * stringifyRJSONNumber(1e20);    // → "1e+20" (if exponential is shorter)
  * stringifyRJSONNumber(NaN);     // → "N"
+ * stringifyRJSONNumber(-0);     // → "-0"
  */
 export const stringifyRJSONNumber = (data: number): string => {
-  if (!Number.isFinite(data)) {
-    return "N";
+  if (isNaN(data)) {
+    return String.fromCharCode(Constants.CCNaN);
+  } else if (!isFinite(data)) {
+    if (data < 0) {
+      return "-" + String.fromCharCode(Constants.CCInf);
+    } else {
+      return String.fromCharCode(Constants.CCInf);
+    }
   } else if (data === 0) {
-    return "0";
+    return Object.is(data, -0) ? "-0" : "0";
   }
   const expo = data.toExponential();
   const norm = data.toString();
@@ -729,6 +1206,19 @@ export const stringifyRJSONBoolean = (data: boolean): string => {
  * Main serialization function for any JavaScript value to RJSON.
  * Dispatches to the appropriate type‑specific serializer.
  *
+ * Mappings:
+ *
+ *   Object: (key:value,...)
+ *   Array: (a,b,c,...)
+ *   Text: 'hello' | "your's" | `"wow"` | 'hello\'\"\`'
+ *   Number: 0 | -123 | 3.1415 | 2.8e+100
+ *   Boolean: T | F
+ *   Undefined: U
+ *   Null: N | <empty>
+ *   NaN: X
+ *   Infinity: I
+ *  -Infinity: -I
+ *
  * @param data - The value to serialize (optional; `undefined` becomes `"U"`).
  * @returns RJSON string representation.
  *
@@ -744,7 +1234,7 @@ export const stringifyRJSON = (data?: unknown): string => {
   if (data === undefined) {
     return "U";
   } else if (data === null) {
-    return "";
+    return "N";
   }
   switch (typeof data) {
     case "object":
@@ -752,13 +1242,13 @@ export const stringifyRJSON = (data?: unknown): string => {
         ? stringifyRJSONArray(data)
         : stringifyRJSONObject(data as Record<string, unknown>);
     case "string":
-      return stringifyRJSONString(data);
+      return stringifyRJSONText(data);
     case "number":
       return stringifyRJSONNumber(data);
     case "boolean":
       return stringifyRJSONBoolean(data);
     default:
-      return stringifyRJSONString(String(data));
+      return stringifyRJSONText(String(data));
   }
 };
 
@@ -771,7 +1261,7 @@ export const RJSON = {
   stringifyKey: stringifyRJSONKey,
   stringifyObject: stringifyRJSONObject,
   stringifyMappedArray: stringifyRJSONMappedArray,
-  stringifyString: stringifyRJSONString,
+  stringifyText: stringifyRJSONText,
   stringifyNumber: stringifyRJSONNumber,
   stringifyBoolean: stringifyRJSONBoolean,
 };

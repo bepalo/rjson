@@ -8,7 +8,7 @@ const {
   stringifyRJSONKey,
   stringifyRJSONObject,
   stringifyRJSONArray,
-  stringifyRJSONString,
+  stringifyRJSONText,
   stringifyRJSONNumber,
   stringifyRJSONBoolean,
 } = typeof Deno !== "undefined" ? await import("@bepalo/rjson") : await import("@bepalo/rjson");
@@ -52,9 +52,9 @@ describe("RJSON.parse - Objects", () => {
     expect(result).toEqual({});
   });
 
-  test("should parse object with empty value (null)", () => {
+  test("should parse object with empty value (undefined)", () => {
     const result = parseRJSON("(name:)");
-    expect(result).toEqual({ name: null });
+    expect(result).toEqual({ name: undefined });
   });
 });
 
@@ -172,9 +172,9 @@ describe("RJSON.parse - Null and Undefined", () => {
     expect(result).toEqual({ value: undefined });
   });
 
-  test("should parse empty value as null", () => {
+  test("should parse empty value as undefined", () => {
     const result = parseRJSON("(value:)");
-    expect(result).toEqual({ value: null });
+    expect(result).toEqual({ value: undefined });
   });
 });
 
@@ -263,7 +263,7 @@ describe("RJSON.stringify - Basic Types", () => {
 
   test("should stringify null", () => {
     const result = stringifyRJSON(null);
-    expect(result).toBe("");
+    expect(result).toBe("N");
   });
 
   test("should stringify undefined", () => {
@@ -466,9 +466,9 @@ describe("Edge cases", () => {
     expect(result).toEqual({ msg: "" });
   });
 
-  test("should parse array with null values", () => {
+  test("should parse array with null and undefined values", () => {
     const result = parseRJSON("_(N,,U)_");
-    expect(result).toEqual([null, null, undefined]);
+    expect(result).toEqual([null, undefined, undefined]);
   });
 
   test("should handle object with many properties", () => {
@@ -497,9 +497,165 @@ describe("RJSON.parse - Whitespace handling", () => {
     expect(result).toEqual({ a: 1, b: 2 });
   });
 
-  test("should parse empty string input as null", () => {
+  test("should parse empty string input as undefined", () => {
     const result = parseRJSON("");
-    expect(result).toBeNull();
+    expect(result).toBeUndefined();
+  });
+
+  test("should parse object with spaces", () => {
+    const result = parseRJSON("( a : 1 , b : 2 )");
+    expect(result).toEqual({ a: 1, b: 2 });
+  });
+
+  test("should parse object with newlines", () => {
+    const result = parseRJSON("(\n  a: 1,\n  b: 2\n)");
+    expect(result).toEqual({ a: 1, b: 2 });
+  });
+
+  test("should parse object with carriage returns", () => {
+    const result = parseRJSON("(\r  a: 1,\r  b: 2\r)");
+    expect(result).toEqual({ a: 1, b: 2 });
+  });
+
+  test("should parse object with tabs", () => {
+    const result = parseRJSON("(\t a:\t1,\t b:\t2\t)");
+    expect(result).toEqual({ a: 1, b: 2 });
+  });
+
+  test("should parse array with mixed whitespace", () => {
+    const result = parseRJSON("_(\n\t1 ,\r 2 , \n3 \n)_");
+    expect(result).toEqual([1, 2, 3]);
+  });
+
+  test("should parse document with leading and trailing whitespace", () => {
+    const result = parseRJSON("   \n\t ( a : 1 ) \n  \r  ");
+    expect(result).toEqual({ a: 1 });
+  });
+
+  test("should parse empty object with internal whitespace", () => {
+    const result = parseRJSON("( \n \t \r )");
+    expect(result).toEqual({});
+  });
+
+  test("should parse empty array with internal whitespace", () => {
+    const result = parseRJSON("_( \n \t \r )_");
+    expect(result).toEqual([]);
+  });
+
+  test("should parse mapped array with whitespace around start and end tokens", () => {
+    const result = parseRJSON("~ T ( a , b )~");
+    expect(result).toEqual({ a: true, b: true });
+  });
+
+  test("should parse mapped array with inner whitespace", () => {
+    const result = parseRJSON("~ \n T \n ( \n a \n , \n b \n )~");
+    expect(result).toEqual({ a: true, b: true });
+  });
+
+  test("should parse multiple sequential spaces and newlines between values", () => {
+    const result = parseRJSON("(a:    1,\n\n\nb:    2)");
+    expect(result).toEqual({ a: 1, b: 2 });
+  });
+
+  test("should parse nested objects with excessive whitespace", () => {
+    const result = parseRJSON("( \n a \n : \n ( \n b \n : \n 1 \n ) \n )");
+    expect(result).toEqual({ a: { b: 1 } });
+  });
+
+  test("should parse nested arrays with excessive whitespace", () => {
+    const result = parseRJSON("_( \n _( \n 1 \n )_ \n , \n _( \n 2 \n )_ \n )_");
+    expect(result).toEqual([[1], [2]]);
+  });
+
+  test("should parse whitespace around boolean and null tokens", () => {
+    const result = parseRJSON("( a : T , b : F , c : N , d : U )");
+    expect(result).toEqual({ a: true, b: false, c: null, d: undefined });
+  });
+
+  test("should parse whitespace around string tokens", () => {
+    const result = parseRJSON("( a : 'hello' , b : \"world\" , c : `test` )");
+    expect(result).toEqual({ a: "hello", b: "world", c: "test" });
+  });
+
+  test("should preserve whitespace inside string tokens while ignoring it outside", () => {
+    const result = parseRJSON("( a : ' hello ' , b : \" world \" )");
+    expect(result).toEqual({ a: " hello ", b: " world " });
+  });
+
+  test("should handle whitespace after object keys that are quoted", () => {
+    const result = parseRJSON("( 'key1' : 1 , \"key2\" : 2 , `key3` : 3 )");
+    expect(result).toEqual({ key1: 1, key2: 2, key3: 3 });
+  });
+
+  test("should handle whitespace in extremely complex mixed structures", () => {
+    const result = parseRJSON(`
+      (
+        user : (
+          id : 123 ,
+          name : 'Alice' ,
+          active : T
+        ) ,
+        tags : _(
+          'admin' ,
+          'staff'
+        )_ ,
+        perms : ~ T ( read , write )~
+      )
+    `);
+    expect(result).toEqual({
+      user: { id: 123, name: "Alice", active: true },
+      tags: ["admin", "staff"],
+      perms: { read: true, write: true }
+    });
+  });
+  test("should parse whitespace around numeric tokens", () => {
+    const result = parseRJSON("( int :  42  , float :  3.14  , exp :  1e5  )");
+    expect(result).toEqual({ int: 42, float: 3.14, exp: 1e5 });
+  });
+
+  test("should parse whitespace around empty values (implicit nulls)", () => {
+    const result = parseRJSON("( a :   , b :  )");
+    expect(result).toEqual({ a: undefined, b: undefined });
+  });
+
+  test("should parse array with empty values and whitespace", () => {
+    const result = parseRJSON("_(  ,  ,  ,  )_");
+    expect(result).toEqual([undefined, undefined, undefined]);
+  });
+
+  test("should parse whitespace-only keys when quoted", () => {
+    const result = parseRJSON("( ' ' : 1 , \"\n\" : 2 , `\t` : 3 )");
+    expect(result).toEqual({ " ": 1, "\n": 2, "\t": 3 });
+  });
+
+  test("should parse mapped array with string value and whitespace", () => {
+    const result = parseRJSON("~  'admin'  ( user1 , user2 )~");
+    expect(result).toEqual({ user1: "admin", user2: "admin" });
+  });
+
+  test("should parse mapped array with number value and whitespace", () => {
+    const result = parseRJSON("~  0  ( read , write )~");
+    expect(result).toEqual({ read: 0, write: 0 });
+  });
+
+  test("should parse deeply nested structures with whitespace at every level", () => {
+    const result = parseRJSON("( \n a \n : \n _( \n ( \n b \n : \n ~ \n T \n ( \n c \n )~ \n ) \n )_ \n )");
+    expect(result).toEqual({ a: [{ b: { c: true } }] });
+  });
+
+  test("should parse object with trailing comma and whitespace", () => {
+    const result = parseRJSON("( a : 1 , \n \t )");
+    expect(result).toEqual({ a: 1 });
+  });
+
+  test("should parse array with trailing comma and whitespace", () => {
+    const result = parseRJSON("_( 1 , 2 , \n \t )_");
+    expect(result).toEqual([1, 2]);
+  });
+
+  test("should parse strings with multi-line whitespace content", () => {
+    const result = parseRJSON("( text : 'line1\n\r\tline2' )");
+    expect(result).toEqual({ text: "line1\n\r\tline2" });
   });
 });
 
@@ -521,7 +677,7 @@ describe("RJSON.parse - Unicode and special characters", () => {
 
   test("should parse string with newline escape sequence", () => {
     const result = parseRJSON("(text:'line1\\nline2')");
-    expect(result.text).toBe("line1nline2");
+    expect(result.text).toBe("line1\\nline2");
   });
 
   test("should parse string with backslash", () => {
@@ -585,9 +741,9 @@ describe("RJSON.parse - String escape sequences", () => {
 });
 
 describe("RJSON.parse - Array edge cases", () => {
-  test("should parse single element array with null", () => {
+  test("should parse empty array", () => {
     const result = parseRJSON("_()_");
-    expect(result).toEqual([null]);
+    expect(result).toEqual([]);
   });
 
   test("should parse single element array", () => {
@@ -616,15 +772,15 @@ describe("RJSON.parse - Array edge cases", () => {
   });
 
   test("should parse array with mixed empties", () => {
-    const result = parseRJSON("_(,,U,'')_");
-    expect(result).toEqual([null, null, undefined, ""]);
+    const result = parseRJSON("_(,,N,U,'')_");
+    expect(result).toEqual([undefined, undefined, null, undefined, ""]);
   });
 });
 
 describe("RJSON.parse - Object edge cases", () => {
   test("should parse object with only empty value", () => {
     const result = parseRJSON("(x:)");
-    expect(result).toEqual({ x: null });
+    expect(result).toEqual({ x: undefined });
   });
 
   test("should parse object with underscore in key", () => {
@@ -728,17 +884,17 @@ describe("RJSON.stringify - Function coverage", () => {
     expect(result).toContain("c:T");
   });
 
-  test("stringifyRJSONString prefers single quotes", () => {
-    expect(stringifyRJSONString("hello")).toBe("'hello'");
+  test("stringifyRJSONText prefers single quotes", () => {
+    expect(stringifyRJSONText("hello")).toBe("'hello'");
   });
 
-  test("stringifyRJSONString uses double quotes when needed", () => {
-    expect(stringifyRJSONString("don't")).toBe('"don\'t"');
+  test("stringifyRJSONText uses double quotes when needed", () => {
+    expect(stringifyRJSONText("don't")).toBe('"don\'t"');
   });
 
-  test("stringifyRJSONString uses backticks for both quotes", () => {
-    const result = stringifyRJSONString("it's \"great\"");
-    expect(result).toMatch(/[`'"]/);
+  test("stringifyRJSONText uses backticks for both quotes", () => {
+    const result = stringifyRJSONText("it's \"great\"");
+    expect(result).toEqual('`it\'s "great"`');
   });
 
   test("stringifyRJSONNumber prefers standard notation", () => {
@@ -959,8 +1115,8 @@ describe("RJSON API - Complete coverage", () => {
     expect(parsed.write).toBe(true);
   });
 
-  test("RJSON.stringifyString handles quotes correctly", () => {
-    const result = RJSON.stringifyString("test");
+  test("RJSON.stringifyText handles quotes correctly", () => {
+    const result = RJSON.stringifyText("test");
     expect(result).toBe("'test'");
   });
 
@@ -1121,3 +1277,330 @@ describe("Quote and escape handling", () => {
     expect(stringified).toContain("path");
   });
 });
+
+describe("RJSON.parse - Trailing commas", () => {
+  test("should ignore single trailing comma in array", () => {
+    const result = parseRJSON("_(1,2,3,)_");
+    expect(result).toEqual([1, 2, 3]);
+  });
+
+  test("should parse multiple trailing commas in array as nulls", () => {
+    const result = parseRJSON("_(1,2,3,,)_");
+    expect(result).toEqual([1, 2, 3, undefined]);
+  });
+
+  test("should handle three trailing commas in array", () => {
+    const result = parseRJSON("_(1,,,)_");
+    expect(result).toEqual([1, undefined, undefined]);
+  });
+
+  test("should ignore single trailing comma in object", () => {
+    const result = parseRJSON("(a:1,b:2,)");
+    expect(result).toEqual({ a: 1, b: 2 });
+  });
+
+  test("should ignore single trailing comma in mapped array", () => {
+    const result = parseRJSON("~T(a,b,)~");
+    expect(result).toEqual({ a: true, b: true });
+  });
+
+  test("should handle multiple trailing commas in mapped array", () => {
+    const result = parseRJSON("~1(x,y,,)~");
+    expect(result).toEqual({ x: 1, y: 1, "": 1 });
+  });
+
+  test("should handle array with only one comma", () => {
+    const result = parseRJSON("_(,)_");
+    expect(result).toEqual([undefined]);
+  });
+});
+
+describe("RJSON.parse - Root level primitives", () => {
+  test("should parse root level boolean", () => {
+    expect(parseRJSON("T")).toBe(true);
+    expect(parseRJSON("F")).toBe(false);
+  });
+
+  test("should parse root level null and undefined", () => {
+    expect(parseRJSON("N")).toBeNull();
+    expect(parseRJSON("U")).toBeUndefined();
+  });
+
+  test("should parse root level string", () => {
+    expect(parseRJSON("'hello world'")).toBe("hello world");
+  });
+
+  test("should parse root level number", () => {
+    expect(parseRJSON("42.5")).toBe(42.5);
+  });
+});
+
+describe("RJSON.parse - Complex Mapped Arrays", () => {
+  test("should parse mapped array with object value with escape char \\", () => {
+    const result = parseRJSON("~ \\( role : 'admin' ) ( user1 , user2 )~");
+    expect(result).toEqual({ user1: { role: 'admin' }, user2: { role: 'admin' } });
+  });
+
+  test("should parse mapped array with array value", () => {
+    const result = parseRJSON("~ _( 1 , 2 )_ ( a , b )~");
+    expect(result).toEqual({ a: [1, 2], b: [1, 2] });
+  });
+
+  test("should parse nested mapped arrays", () => {
+    const result = parseRJSON("~ ~ T ( a , b )~ ( group1 , group2 )~");
+    expect(result).toEqual({ group1: { a: true, b: true }, group2: { a: true, b: true } });
+  });
+});
+
+describe("RJSON.parse - Duplicate Keys and Prototype Pollution", () => {
+  test("should overwrite duplicate keys in objects", () => {
+    const result = parseRJSON("( a : 1 , a : 2 , a : 3 )");
+    expect(result).toEqual({ a: 3 });
+  });
+
+  test("should overwrite duplicate keys in mapped arrays", () => {
+    const result = parseRJSON("~ T ( a , a , a )~");
+    expect(result).toEqual({ a: true });
+  });
+
+  test("should handle constructor key safely", () => {
+    const result = parseRJSON("( constructor : 'polluted' )");
+    expect(result.constructor).toBe("polluted");
+  });
+});
+
+describe("RJSON.parse - Special Numbers", () => {
+  test("should parse NaN(X)", () => {
+    const result = parseRJSON("( value : X )");
+    expect(Number.isNaN(result.value)).toBe(true);
+  });
+
+  test("should parse Infinity(I)", () => {
+    const result = parseRJSON("( value : I )");
+    expect(isFinite(result.value)).toBeFalsy();
+    expect(result.value).toBeGreaterThan(0);
+  });
+
+  test("should parse positive Infinity(+I)", () => {
+    const result = parseRJSON("( value : +I )");
+    expect(isFinite(result.value)).toBeFalsy();
+    expect(result.value).toBeGreaterThan(0);
+  });
+
+  test("should parse negative Infinity(-I)", () => {
+    const result = parseRJSON("( value : -I )");
+    expect(isFinite(result.value)).toBeFalsy();
+    expect(result.value).toBeLessThan(0);
+  });
+
+  test("should parse special numbers in arrays(X,I,+I,-I)", () => {
+    const result = parseRJSON("_( X , I, +I , -I )_");
+    expect(Number.isNaN(result[0])).toBe(true);
+    expect(isFinite(result[1])).toBeFalsy();
+    expect(result[1]).toBeGreaterThan(0);
+    expect(isFinite(result[2])).toBeFalsy();
+    expect(result[2]).toBeGreaterThan(0);
+    expect(isFinite(result[3])).toBeFalsy();
+    expect(result[3]).toBeLessThan(0);
+  });
+});
+
+describe("RJSON - Roundtrip escape character", () => {
+  test("should roundtrip single backslash", () => {
+    const s = "\\";
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+
+  test("should roundtrip trailing backslash", () => {
+    const s = "abc\\";
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+
+  test("should roundtrip leading backslash", () => {
+    const s = "\\abc";
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+
+  test("should roundtrip many backslashes", () => {
+    const s = "\\\\\\\\\\\\\\\\";
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+
+  test("should roundtrip all delimiters", () => {
+    const s = `'"\``;
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  }); 
+
+  test("should roundtrip all delimiters with escapes", () => {
+    const s = `"''\`abc\`'""\\\\'"`;
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+})
+
+describe("RJSON - Roundtrip unicode tests", () => {
+  test("should roundtrip ethiopic", () => {
+    const s = "ሰላም";
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+
+  test("should roundtrip emoji", () => {
+    const s = "🚀";
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+
+  test("should roundtrip zwj emoji", () => {
+    const s = "👨‍💻";
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+
+  test("should roundtrip mixed unicode", () => {
+    const s = "ሰላም 🚀 👨‍💻 Hello";
+    expect(parseRJSON(stringifyRJSON(s))).toBe(s);
+  });
+});
+
+describe("RJSON - Roundtrip big object", () => {
+  test("should roundtrip big object", () => {
+    const value = {
+      id: 1,
+      active: true,
+      deleted: false,
+      score: NaN,
+      max: Infinity,
+      min: -Infinity,
+      empty: "",
+      undef: undefined,
+      tags: [
+        "hello",
+        "\\",
+        "ሰላም",
+        "🚀",
+        `'"\``,
+        null,
+        undefined,
+      ],
+      nested: {
+        permissions: {
+          read: true,
+          write: true,
+        },
+      },
+    };
+
+    const parsed = parseRJSON(stringifyRJSON(value));
+
+    expect(parsed.id).toBe(value.id);
+    expect(parsed.active).toBe(value.active);
+    expect(parsed.deleted).toBe(value.deleted);
+    expect(Number.isNaN(parsed.score)).toBe(true);
+    expect(parsed.max).toBe(Infinity);
+    expect(parsed.min).toBe(-Infinity);
+    expect(parsed.empty).toBe("");
+    expect(parsed.undef).toBe(undefined);
+    expect(parsed.tags).toEqual(value.tags);
+  });
+});
+
+describe("RJSON - Roundtrip NaN, Infinity, -Infinity", () => {
+  test("should roundtrip NaN", () => {
+    expect(Number.isNaN(parseRJSON(stringifyRJSON(NaN)))).toBe(true);
+  });
+
+  test("should roundtrip Infinity", () => {
+    expect(isFinite(parseRJSON(stringifyRJSON(Infinity)))).toBeFalsy();
+    expect((parseRJSON(stringifyRJSON(Infinity)))).toBeGreaterThan(0);
+  });
+
+  test("should roundtrip -Infinity", () => {
+    expect(isFinite(parseRJSON(stringifyRJSON(-Infinity)))).toBeFalsy();
+    expect((parseRJSON(stringifyRJSON(-Infinity)))).toBeLessThan(0);
+  });
+
+  test("should roundtrip positive zero", () => {
+    const value = +0;
+    const parsed = parseRJSON(stringifyRJSON(value));
+    expect(Object.is(parsed, +0)).toBe(true);
+  });
+
+  test("should roundtrip negative zero", () => {
+    const value = -0;
+    const parsed = parseRJSON(stringifyRJSON(value));
+    expect(Object.is(parsed, -0)).toBe(true);
+  });
+});
+
+describe("RJSON - Roundtrip sparse arrays _(,,N,)_", () => {
+  test("should preserve sparse semantics", () => {
+    expect(parseRJSON("_(,,)_")).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  test("should preserve trailing empties", () => {
+    expect(parseRJSON("_(N,,)_")).toEqual([
+      null,
+      undefined,
+    ]);
+  });
+
+  test("should preserve leading empties", () => {
+    expect(parseRJSON("_(,,N)_")).toEqual([
+      undefined,
+      undefined,
+      null,
+    ]);
+  });
+});
+
+describe("RJSON - Deep nesting", () => {
+  test("should parse 50 nested arrays", () => {
+    let input = "1";
+
+    for (let i = 0; i < 50; i++) {
+      input = `_(${input},2)_`;
+    }
+    expect(() => parseRJSON(input)).not.toThrow();
+    expect(stringifyRJSON(parseRJSON(input))).toEqual(input);
+  });
+  test("should parse 50 nested objects", () => {
+    let input = "1";
+
+    for (let i = 0; i < 50; i++) {
+      input = `(a:${input})`;
+    }
+    expect(() => parseRJSON(input)).not.toThrow();
+    expect(stringifyRJSON(parseRJSON(input))).toEqual(input);
+  });
+});
+
+describe("RJSON - Invalid input", () => {
+  test("should reject unterminated string", () => {
+    expect(() => parseRJSON("'abc")).toThrow();
+  });
+
+  test("should reject unterminated double string", () => {
+    expect(() => parseRJSON('"abc')).toThrow();
+  });
+
+  test("should reject unterminated backtick string", () => {
+  expect(() => parseRJSON("`abc")).toThrow();
+  });
+
+  test("should reject multiple root values", () => {
+    expect(() => parseRJSON("1 2")).toThrow();
+  });
+
+  test("should reject object missing colon", () => {
+    expect(() => parseRJSON("(a 1)")).toThrow();
+  });
+
+  test("should reject malformed exponent", () => {
+    expect(() => parseRJSON("1e")).toThrow();
+  });
+
+  test("should reject malformed exponent sign", () => {
+    expect(() => parseRJSON("1e+")).toThrow();
+  });
+});
+

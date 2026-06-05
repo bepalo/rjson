@@ -13,13 +13,35 @@
 
 **A compact, URL-friendly serialization format that is smaller than JSON while remaining human-readable and fast to parse.**
 
-RJSON (Remote JavaScript Object Notation) is a specification and implementation inspired by RISON and it is designed for:
+RJSON (Remote JavaScript Object Notation) is a specification and implementation inspired by RISON and it was originally designed for better frontend-to-backend communication via search parameters.
 
-- Better frontend-to-backend communication via search parameters.
-- Compact payloads
-- Human-readable configuration
-- Fast parsing without AST generation
-- JavaScript-native data structures
+## 🎯 Why RJSON?
+
+JSON is an excellent interchange format, but:
+
+- It is not as compressed as it can be
+- It is not url friendly
+- It cannot represent several JavaScript runtime values: `undefined` `NaN` `Infinity` `-Infinity` `-0`
+
+RJSON preserves these values while remaining compact, human-readable, and URL-friendly.
+
+```ts
+const value = {
+  active: true,
+  deletedAt: undefined,
+  score: NaN,
+  "limit.upper": Infinity,
+  "limit.lower": -Infinity,
+};
+
+const text = RJSON.stringify(value);
+```
+
+Output:
+
+```txt
+(active:T,deletedAt:U,score:X,limit.upper:I,limit.lower:-I)
+```
 
 ## ✨ Features
 
@@ -27,24 +49,46 @@ RJSON (Remote JavaScript Object Notation) is a specification and implementation 
 - 📦 Smaller than JSON for many real-world payloads
 - 🌐 URL-friendly syntax
 - 🧩 Supports objects, arrays, strings, numbers, booleans
-- 🔐 Supports `null` and `undefined`
-- 🗜️ Built-in mapped-array compression
+- 🔐 Supports `null`, `undefined`, `-0`, `NaN`, `Infinity`, `-Infinity`
+- 🗜️ Built-in mapped-array compression `~T(id,title,body)~` -> `{ id:true, title:true, body:true }`
+- 🔄 Value-preserving roundtrip. `RJSON.parse(RJSON.stringify(value))` preserves JavaScript value semantics.
 - 📝 Tagged template support
-- 🔧 Zero dependencies
+- ☑️ Whitespace support (starting from v2.1.11)
+- 🚀 Runtime agnostic (Node.js, Bun, Deno, Browser)
 - 🟦 TypeScript ready
-- 🚀 Runtime agnostic (Node.js, Bun, Deno)
+- 🔧 Zero dependencies
 
 ## 📑 Table of Contents
 
-1. Features
-2. Installation
-3. Quick Start
-4. Syntax Overview
-5. Core Types
-6. Mapped Arrays
-7. API Reference
-8. Design Goals
-9. License
+- [🎯 Why RJSON?](#-why-rjson)
+- [✨ Features](#-features)
+- [🚀 Get Started](#-get-started)
+  - [📥 Installation](#-installation)
+- [📦 Quick Start](#-quick-start)
+  - [Parse RJSON](#parse-rjson)
+  - [Stringify Objects](#stringify-objects)
+  - [Stringify arrays](#stringify-arrays)
+  - [Stringify mapped-arrays](#stringify-mapped-arrays)
+  - [Tagged Template Helper](#tagged-template-helper)
+- [📚 Syntax Overview](#-syntax-overview)
+- [📚 Core Types](#-core-types)
+  - [Objects](#objects)
+  - [Arrays](#arrays)
+  - [Nested Structures](#nested-structures)
+  - [Strings](#strings)
+  - [Numbers](#numbers)
+  - [Booleans](#booleans)
+  - [Null](#null)
+  - [Undefined](#undefined)
+- [🗜️ Mapped Arrays](#️-mapped-arrays)
+- [🔧 API Reference](#-api-reference)
+  - [parseRJSON](#parserjson)
+  - [stringifyRJSON](#stringifyrjson)
+  - [stringifyRJSONMappedArray](#stringifyrjsonmappedarray)
+  - [rjson](#rjson)
+- [📄 License](#-license)
+- [🕊️ Thanks and Enjoy](#️-thanks-and-enjoy)
+- [💖 Be a Sponsor](#-be-a-sponsor)
 
 ## 🚀 Get Started
 
@@ -81,7 +125,9 @@ import { RJSON } from "jsr:@bepalo/rjson";
 ```ts
 import { RJSON } from "@bepalo/rjson";
 
-const user = RJSON.parse("(name:'Natnael',age:25,active:T)");
+const user = RJSON.parse(
+  "(name:'Natnael',age:28,active:T,tasks:_('push','deploy','sleep')_)",
+);
 
 console.log(user);
 ```
@@ -91,8 +137,9 @@ Output:
 ```js
 {
   name: "Natnael",
-  age: 25,
-  active: true
+  age: 28,
+  active: true,
+  tasks: [ "push", "deploy", "sleep" ],
 }
 ```
 
@@ -103,7 +150,7 @@ import { RJSON } from "@bepalo/rjson";
 
 const text = RJSON.stringify({
   name: "Natnael",
-  age: 25,
+  age: 28,
   active: true,
 });
 
@@ -113,7 +160,7 @@ console.log(text);
 Output:
 
 ```txt
-(name:'Natnael',age:25,active:T)
+(name:'Natnael',age:28,active:T)
 ```
 
 ### Stringify arrays
@@ -129,7 +176,7 @@ console.log(text);
 Output:
 
 ```txt
-_(1,3.1415,,U,T,'hello')_
+_(1,3.1415,N,,T,'hello')_
 ```
 
 ### Stringify mapped-arrays
@@ -153,7 +200,10 @@ Output:
 ```ts
 import { rjson } from "@bepalo/rjson";
 
-const user = rjson`(name:'Natnael',age:25,active:T)`;
+const name = "Natnael";
+const age = 28;
+
+const user = rjson`(name:'${name}',age:${age},active:T)`;
 
 console.log(user);
 ```
@@ -163,7 +213,7 @@ Output:
 ```js
 {
   name: "Natnael",
-  age: 25,
+  age: 28,
   active: true,
 }
 ```
@@ -174,12 +224,16 @@ Output:
 | ------------ | ----------------------------- | ---------------------------- |
 | Object       | `(name:'John')`               | `{"name":"John"}`            |
 | Array        | `_(1,2,3)_`                   | `[1,2,3]`                    |
+| Mapped Array | `~T(admin,user)~`             | `{"admin":true,"user":true}` |
 | String       | `'hello'` `"hello"` \`hello\` | `"hello"`                    |
 | Number       | `123`                         | `123`                        |
 | Boolean      | `T` / `F`                     | `true` / `false`             |
 | Null         | `N`                           | `null`                       |
 | Undefined    | `U`                           | Not supported                |
-| Mapped Array | `~T(admin,user)~`             | `{"admin":true,"user":true}` |
+| NaN          | `X`                           | Not Supported                |
+| Infinity     | `I`                           | Not Supported                |
+| -Infinity    | `-I`                          | Not Supported                |
+| -0           | `-0`                          | Not Supported                |
 
 ### 📚 Core Types
 
@@ -230,7 +284,7 @@ Produces:
 
 #### Strings
 
-Supported delimiters:
+RJSON supports three string delimiters: `'` `"` `
 
 ```txt
 'hello'
@@ -238,21 +292,19 @@ Supported delimiters:
 `hello`
 ```
 
-Escaping:
+The serializer automatically chooses the delimiter that requires the least escaping.
+
+```ts
+RJSON.stringify(`'"hello"'`);
+```
+
+Output:
 
 ```txt
-'can\'t'
+`'"hello"'`
 ```
 
-```js
-const text = `'can\\'t'`;
-```
-
-Produces:
-
-```js
-"can't";
-```
+This keeps serialized output compact and readable.
 
 #### Numbers
 
@@ -265,12 +317,16 @@ Supported formats:
 12.5
 1e10
 1e-10
+-0
+X -> NaN
+I -> Infinity
+-I -> -Infinity
 ```
 
 Examples:
 
 ```txt
-age:25
+age:28
 price:19.99
 distance:1.5e6
 ```
@@ -278,25 +334,13 @@ distance:1.5e6
 #### Booleans
 
 ```txt
-T
+_( T, F )_
 ```
 
 Produces:
 
 ```js
-true;
-```
-
----
-
-```txt
-F
-```
-
-Produces:
-
-```js
-false;
+[true, false];
 ```
 
 #### Null
@@ -309,20 +353,6 @@ Produces:
 
 ```js
 null;
-```
-
-Empty values are also treated as null:
-
-```txt
-(name:)
-```
-
-Produces:
-
-```js
-{
-  name: null;
-}
 ```
 
 #### Undefined
@@ -339,11 +369,31 @@ Produces:
 }
 ```
 
+Empty values are also treated as undefined:
+
+```txt
+(name:,array:_(,)_,mapped:~(a)~,empty:(),end:)
+```
+
+Produces:
+
+```js
+{
+  name: undefined,
+  array: [ undefined ],
+  mapped: {
+    a: undefined,
+  },
+  empty: {},
+  end: undefined,
+}
+```
+
 ### 🗜️ Mapped Arrays
 
 Mapped arrays compress repeated values.
 
-Instead of:
+Instead of doing:
 
 ```js
 {
@@ -359,7 +409,7 @@ Use:
 ~T(admin,editor,user)~
 ```
 
-Result:
+Produces:
 
 ```js
 {
@@ -371,19 +421,24 @@ Result:
 
 ---
 
-The value can be any valid RJSON type
+The value can be any valid RJSON type. However, to have an object as value
+its start token `(` has to be escaped.
+
+_NOTE: Allowed whitespace positions. Also whitespaces are not required._
 
 ```txt
-~F(create,update,delete)~
-~(roles:_('admin','user')_)(create,update,delete)~
-~~F(admin,user)~(create,update,delete)~
+~ \(roles:_('admin','user')_) (create,update,delete)~
+
+~ F (create,update,delete)~
+
+~ ~ F (admin,user)~ (create,update,delete)~
 ```
 
 ## 🔧 API Reference
 
 ### parseRJSON
 
-Parses RJSON text.
+Parses RJSON from string.
 
 ```ts
 const value = parseRJSON("(name:'John',active:T)");
@@ -391,7 +446,7 @@ const value = parseRJSON("(name:'John',active:T)");
 
 ### stringifyRJSON
 
-Serializes JavaScript values.
+Serializes JavaScript values to RJSON format.
 
 ```ts
 const text = stringifyRJSON({
@@ -430,54 +485,26 @@ const data = rjson`
 `;
 ```
 
-## 🎯 Why RJSON?
+## 🔄 Migration Guide
 
-It is designed for better frontend-to-backend communication via search parameters.
+### Upgrading from v1.0.10 to v2.1.11
 
-Benefits:
+RJSON `v2.x` introduces a fully optimized grammar layout that treats explicit `null` and implicit `undefined` as independent, native values. If you are migrating an existing application from a `v1.x` runtime, use the matrix below to audit changes to your network transport footprints and api surface.
 
-- Smaller payloads
-- Easier URL embedding
-- Human-readable
-- JavaScript-oriented
-- Fast parsing
+#### Serialization Footprint Matrix
 
-Example:
-
-JSON
-
-```json
-{
-  "name": "John",
-  "active": true,
-  "roles": ["admin", "user"]
-}
-```
-
-RJSON
-
-```txt
-(name:'John',active:T,roles:_('admin','user')_)
-```
-
-## ⚠️ Current Limitations
-
-- Whitespace is forbidden.
-- Designed primarily for compact transport and URLs.
-
-Invalid:
-
-```txt
-(
- name : 'John'
-)
-```
-
-Valid:
-
-```txt
-(name:'John')
-```
+| Value / API Reference       | Target v1.0.10          | Target v2.1.11        | Notes / Semantic Shifts                                                            |
+| :-------------------------- | :---------------------- | :-------------------- | :--------------------------------------------------------------------------------- |
+| **`null`**                  | `""`                    | `"N"`                 | Now serialized explicitly to prevent collision with missing properties.            |
+| **`undefined`**             | `"U"`                   | `""` \| `"U"`         | Evaluates to an empty slot inside collection layouts; returns `"U"` if standalone. |
+| **`[1, undefined, 3]`**     | `_(1,U,3)_`             | `_(1,,3)_`            | Array holes leverage highly efficient conditional trailing comma notation.         |
+| **`[,]`** **`[,,]`**        | `_()_` `_(,)_`          | `_(,)_` `_(,,)_`      | Empty array elements are now handled properly and treated as `undefined`.          |
+| **`NaN`**                   | `null`                  | `X`                   | Native support added for IEEE 754 special values.                                  |
+| **`Infinity`**              | `null`                  | `I`                   | Native positive infinity tracking.                                                 |
+| **`-Infinity`**             | `null`                  | `-I`                  | Native negative infinity tracking.                                                 |
+| **`-0`**                    | `0`                     | `-0`                  | Sign-bit fidelity preserved during serialization loops.                            |
+| **`stringifyRJSONString`**  | `stringifyRJSONString`  | `stringifyRJSONText`  | Utility renamed to clear naming collision with global `String`.                    |
+| **`RJSON.stringifyString`** | `RJSON.stringifyString` | `RJSON.stringifyText` | Namespace reference updated to point to the text subsystem encoder.                |
 
 ## 📄 License
 

@@ -2,16 +2,16 @@
 
 | 🕙 Start time | ⌛ Duration |
 | --- | ---: |
-| 6/2/2026, 5:12:35 PM | 0.787 s |
+| 6/5/2026, 3:52:42 PM | 0.844 s |
 
 | | ✅ Passed | ❌ Failed | ⏩ Skipped | 🚧 Todo | ⚪ Total |
 | --- | ---: | ---: | ---: | ---: | ---: |
-|Test Suites|37|0|0|0|37|
-|Tests|170|0|0|0|170|
+|Test Suites|49|0|0|0|49|
+|Tests|248|0|0|0|248|
 
 ## ✅ <a id="file0" href="#file0">tests/parser.test.js</a>
 
-170 passed, 0 failed, 0 skipped, 0 todo, done in 56.796411000000035 s
+248 passed, 0 failed, 0 skipped, 0 todo, done in 79.57753300000013 s
 
 ```
 ✅ RJSON.parse - Objects
@@ -22,7 +22,7 @@
    ✅ should parse object with dot notation keys
    ✅ should parse object with quoted keys
    ✅ should parse empty object
-   ✅ should parse object with empty value (null)
+   ✅ should parse object with empty value (undefined)
 ✅ RJSON.parse - Arrays
    ✅ should parse simple array
    ✅ should parse array with strings
@@ -49,7 +49,7 @@
 ✅ RJSON.parse - Null and Undefined
    ✅ should parse explicit null as N
    ✅ should parse undefined as U
-   ✅ should parse empty value as null
+   ✅ should parse empty value as undefined
 ✅ RJSON.parse - Mapped Arrays
    ✅ should parse mapped array with true
    ✅ should parse mapped array with false
@@ -104,13 +104,41 @@
    ✅ should throw on invalid mapped array
 ✅ Edge cases
    ✅ should parse empty string value
-   ✅ should parse array with null values
+   ✅ should parse array with null and undefined values
    ✅ should handle object with many properties
    ✅ should parse very nested structure
    ✅ should stringify and parse object with special identifier keys
 ✅ RJSON.parse - Whitespace handling
    ✅ should parse object with no whitespace
-   ✅ should parse empty string input as null
+   ✅ should parse empty string input as undefined
+   ✅ should parse object with spaces
+   ✅ should parse object with newlines
+   ✅ should parse object with carriage returns
+   ✅ should parse object with tabs
+   ✅ should parse array with mixed whitespace
+   ✅ should parse document with leading and trailing whitespace
+   ✅ should parse empty object with internal whitespace
+   ✅ should parse empty array with internal whitespace
+   ✅ should parse mapped array with whitespace around start and end tokens
+   ✅ should parse mapped array with inner whitespace
+   ✅ should parse multiple sequential spaces and newlines between values
+   ✅ should parse nested objects with excessive whitespace
+   ✅ should parse nested arrays with excessive whitespace
+   ✅ should parse whitespace around boolean and null tokens
+   ✅ should parse whitespace around string tokens
+   ✅ should preserve whitespace inside string tokens while ignoring it outside
+   ✅ should handle whitespace after object keys that are quoted
+   ✅ should handle whitespace in extremely complex mixed structures
+   ✅ should parse whitespace around numeric tokens
+   ✅ should parse whitespace around empty values (implicit nulls)
+   ✅ should parse array with empty values and whitespace
+   ✅ should parse whitespace-only keys when quoted
+   ✅ should parse mapped array with string value and whitespace
+   ✅ should parse mapped array with number value and whitespace
+   ✅ should parse deeply nested structures with whitespace at every level
+   ✅ should parse object with trailing comma and whitespace
+   ✅ should parse array with trailing comma and whitespace
+   ✅ should parse strings with multi-line whitespace content
 ✅ RJSON.parse - Unicode and special characters
    ✅ should parse unicode characters in strings
    ✅ should parse japanese characters
@@ -130,7 +158,7 @@
    ✅ should parse backtick string with single quotes
    ✅ should parse string with mixed quote types
 ✅ RJSON.parse - Array edge cases
-   ✅ should parse single element array with null
+   ✅ should parse empty array
    ✅ should parse single element array
    ✅ should parse array with only undefined
    ✅ should parse deeply nested arrays
@@ -161,9 +189,9 @@
    ✅ stringifyRJSONArray with primitives
    ✅ stringifyRJSONObject with empty object
    ✅ stringifyRJSONObject with various types
-   ✅ stringifyRJSONString prefers single quotes
-   ✅ stringifyRJSONString uses double quotes when needed
-   ✅ stringifyRJSONString uses backticks for both quotes
+   ✅ stringifyRJSONText prefers single quotes
+   ✅ stringifyRJSONText uses double quotes when needed
+   ✅ stringifyRJSONText uses backticks for both quotes
    ✅ stringifyRJSONNumber prefers standard notation
    ✅ stringifyRJSONNumber uses exponent for very small
    ✅ stringifyRJSONNumber with zero
@@ -193,7 +221,7 @@
    ✅ RJSON.stringifyKey works for various key types
    ✅ RJSON.stringifyObject creates valid objects
    ✅ RJSON.stringifyMappedArray creates valid mapped arrays
-   ✅ RJSON.stringifyString handles quotes correctly
+   ✅ RJSON.stringifyText handles quotes correctly
    ✅ RJSON.stringifyNumber handles various numbers
    ✅ RJSON.stringifyBoolean handles booleans
 ✅ Error handling - Extended
@@ -220,4 +248,66 @@
    ✅ should handle string with all quote types
    ✅ should escape quotes in key when necessary
    ✅ should handle backslashes in strings
+✅ RJSON.parse - Trailing commas
+   ✅ should ignore single trailing comma in array
+   ✅ should parse multiple trailing commas in array as nulls
+   ✅ should handle three trailing commas in array
+   ✅ should ignore single trailing comma in object
+   ✅ should ignore single trailing comma in mapped array
+   ✅ should handle multiple trailing commas in mapped array
+   ✅ should handle array with only one comma
+✅ RJSON.parse - Root level primitives
+   ✅ should parse root level boolean
+   ✅ should parse root level null and undefined
+   ✅ should parse root level string
+   ✅ should parse root level number
+✅ RJSON.parse - Complex Mapped Arrays
+   ✅ should parse mapped array with object value with escape char \
+   ✅ should parse mapped array with array value
+   ✅ should parse nested mapped arrays
+✅ RJSON.parse - Duplicate Keys and Prototype Pollution
+   ✅ should overwrite duplicate keys in objects
+   ✅ should overwrite duplicate keys in mapped arrays
+   ✅ should handle constructor key safely
+✅ RJSON.parse - Special Numbers
+   ✅ should parse NaN(X)
+   ✅ should parse Infinity(I)
+   ✅ should parse positive Infinity(+I)
+   ✅ should parse negative Infinity(-I)
+   ✅ should parse special numbers in arrays(X,I,+I,-I)
+✅ RJSON - Roundtrip escape character
+   ✅ should roundtrip single backslash
+   ✅ should roundtrip trailing backslash
+   ✅ should roundtrip leading backslash
+   ✅ should roundtrip many backslashes
+   ✅ should roundtrip all delimiters
+   ✅ should roundtrip all delimiters with escapes
+✅ RJSON - Roundtrip unicode tests
+   ✅ should roundtrip ethiopic
+   ✅ should roundtrip emoji
+   ✅ should roundtrip zwj emoji
+   ✅ should roundtrip mixed unicode
+✅ RJSON - Roundtrip big object
+   ✅ should roundtrip big object
+✅ RJSON - Roundtrip NaN, Infinity, -Infinity
+   ✅ should roundtrip NaN
+   ✅ should roundtrip Infinity
+   ✅ should roundtrip -Infinity
+   ✅ should roundtrip positive zero
+   ✅ should roundtrip negative zero
+✅ RJSON - Roundtrip sparse arrays _(,,N,)_
+   ✅ should preserve sparse semantics
+   ✅ should preserve trailing empties
+   ✅ should preserve leading empties
+✅ RJSON - Deep nesting
+   ✅ should parse 50 nested arrays
+   ✅ should parse 50 nested objects
+✅ RJSON - Invalid input
+   ✅ should reject unterminated string
+   ✅ should reject unterminated double string
+   ✅ should reject unterminated backtick string
+   ✅ should reject multiple root values
+   ✅ should reject object missing colon
+   ✅ should reject malformed exponent
+   ✅ should reject malformed exponent sign
 ```
